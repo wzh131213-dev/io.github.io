@@ -1,0 +1,1258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>警笛声光模拟控制终端 - Tactical Siren & Light Control System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Noto+Sans+SC:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans SC', system-ui, -apple-system, sans-serif;
+            background-color: #0b0f19;
+            color: #e2e8f0;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+        .font-digits {
+            font-family: 'Orbitron', monospace;
+        }
+        /* Custom Glowing & Lighting Styles */
+        .glow-red {
+            box-shadow: 0 0 25px rgba(239, 68, 68, 0.8), inset 0 0 15px rgba(255, 255, 255, 0.4);
+        }
+        .glow-blue {
+            box-shadow: 0 0 25px rgba(59, 130, 246, 0.8), inset 0 0 15px rgba(255, 255, 255, 0.4);
+        }
+        .glow-amber {
+            box-shadow: 0 0 25px rgba(245, 158, 11, 0.8), inset 0 0 15px rgba(255, 255, 255, 0.4);
+        }
+        .glow-white {
+            box-shadow: 0 0 25px rgba(255, 255, 255, 0.9), inset 0 0 15px rgba(255, 255, 255, 0.6);
+        }
+        .btn-active-red {
+            background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%) !important;
+            box-shadow: 0 0 18px rgba(239, 68, 68, 0.7), inset 0 2px 4px rgba(255, 255, 255, 0.3) !important;
+            color: #ffffff !important;
+            border-color: #fca5a5 !important;
+        }
+        .btn-active-blue {
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
+            box-shadow: 0 0 18px rgba(59, 130, 246, 0.7), inset 0 2px 4px rgba(255, 255, 255, 0.3) !important;
+            color: #ffffff !important;
+            border-color: #93c5fd !important;
+        }
+        .btn-active-amber {
+            background: linear-gradient(135deg, #f59e0b 0%, #b45309 100%) !important;
+            box-shadow: 0 0 18px rgba(245, 158, 11, 0.7), inset 0 2px 4px rgba(255, 255, 255, 0.3) !important;
+            color: #ffffff !important;
+            border-color: #fde68a !important;
+        }
+        /* Dashboard Control Box Texture */
+        .console-panel {
+            background: radial-gradient(circle at 50% 0%, #1f293d 0%, #111827 100%);
+            border: 1px solid #374151;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+        }
+        /* Custom Range Slider */
+        input[type=range] {
+            accent-color: #3b82f6;
+        }
+        /* Screen flash pulse animation */
+        @keyframes flashPulse {
+            0% { opacity: 0.1; }
+            50% { opacity: 1; }
+            100% { opacity: 0.1; }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between overflow-x-hidden">
+
+    <!-- Fullscreen Emergency Strobe Overlay (Hidden by default) -->
+    <div id="fullscreenStrobe" class="fixed inset-0 z-50 hidden flex flex-col justify-between p-6 bg-black transition-opacity duration-75">
+        <div class="flex justify-between items-center text-white/80 z-10 bg-black/40 backdrop-blur-md p-4 rounded-xl border border-white/10">
+            <div class="flex items-center gap-3">
+                <i class="fa-solid fa-lightbulb text-red-500 animate-pulse text-2xl"></i>
+                <div>
+                    <h2 class="font-bold text-lg tracking-wider" id="strobeModeTitle">全屏警示爆闪</h2>
+                    <p class="text-xs text-slate-400">点击任意区域或右上角关闭按钮退出全屏模式</p>
+                </div>
+            </div>
+            <button id="closeStrobeBtn" class="bg-red-600/80 hover:bg-red-600 text-white px-5 py-2 rounded-lg font-bold transition flex items-center gap-2 border border-red-400/30">
+                <i class="fa-solid fa-xmark"></i> 退出全屏
+            </button>
+        </div>
+
+        <!-- Dynamic Strobe Canvas Area -->
+        <div id="strobeDisplayArea" class="absolute inset-0 flex items-center justify-center transition-colors duration-75">
+            <div class="text-center text-white/30 font-digits text-2xl tracking-widest font-black uppercase pointer-events-none select-none">
+                <i class="fa-solid fa-shield-halved text-8xl mb-4 opacity-20 block"></i>
+                Tactical Emergency Light Unit
+            </div>
+        </div>
+
+        <!-- Bottom Controls on Strobe Overlay -->
+        <div class="z-10 flex justify-center gap-4 bg-black/60 backdrop-blur-md p-4 rounded-xl border border-white/10 max-w-xl mx-auto w-full">
+            <button id="strobeToggleSoundBtn" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-lg text-sm font-semibold border border-slate-600 flex items-center gap-2">
+                <i class="fa-solid fa-volume-high text-blue-400"></i> 警笛同步: <span id="strobeSoundStatus">已关闭</span>
+            </button>
+            <button id="strobeNextPatternBtn" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-lg text-sm font-semibold border border-slate-600 flex items-center gap-2">
+                <i class="fa-solid fa-arrows-rotate text-amber-400"></i> 切换闪烁模式
+            </button>
+        </div>
+    </div>
+
+    <!-- Top Header Bar -->
+    <header class="bg-slate-900/90 border-b border-slate-800 p-4 sticky top-0 z-30 backdrop-blur-md">
+        <div class="max-w-6xl mx-auto flex flex-wrap justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-red-600 flex items-center justify-center shadow-lg shadow-red-900/30">
+                    <i class="fa-solid fa-triangle-exclamation text-white text-xl animate-pulse"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-extrabold tracking-wide text-white flex items-center gap-2">
+                        警笛声光模拟控制终端
+                        <span class="text-xs bg-red-600/30 text-red-400 px-2.5 py-0.5 rounded-full border border-red-500/30 font-mono">v3.5 PRO</span>
+                    </h1>
+                    <p class="text-xs text-slate-400">Tactical Police Siren & Emergency Strobe Controller</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3">
+                <button id="fullscreenTriggerBtn" class="bg-gradient-to-r from-red-600 to-blue-600 hover:from-red-500 hover:to-blue-500 text-white font-bold px-4 py-2 rounded-xl text-sm transition shadow-lg flex items-center gap-2 border border-white/20">
+                    <i class="fa-solid fa-expand"></i> 全屏爆闪模式
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="max-w-6xl mx-auto w-full p-4 md:p-6 flex-grow flex flex-col gap-6">
+
+        <!-- Top Vehicle Flasher Light Bar -->
+        <section class="console-panel rounded-2xl p-5 border border-slate-800 relative overflow-hidden">
+            <div class="flex justify-between items-center mb-3">
+                <div class="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-widest">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+                    顶部高亮度 LED 警灯组 (DYNAMIC LIGHTBAR)
+                </div>
+                <div class="text-xs font-mono text-slate-400" id="lightModeLabel">
+                    当前模式: 巡逻交替爆闪
+                </div>
+            </div>
+
+            <!-- Interactive Light Bar LEDs -->
+            <div class="grid grid-cols-12 gap-1.5 md:gap-3 bg-slate-950 p-4 rounded-xl border border-slate-800 shadow-inner min-h-[90px] items-center">
+                <!-- Red Side (Left 5 Units) -->
+                <div id="led-1" class="h-14 md:h-16 rounded-lg bg-red-950/40 border border-red-900/40 transition-all duration-75"></div>
+                <div id="led-2" class="h-14 md:h-16 rounded-lg bg-red-950/40 border border-red-900/40 transition-all duration-75"></div>
+                <div id="led-3" class="h-14 md:h-16 rounded-lg bg-red-950/40 border border-red-900/40 transition-all duration-75"></div>
+                <div id="led-4" class="h-14 md:h-16 rounded-lg bg-red-950/40 border border-red-900/40 transition-all duration-75"></div>
+                <div id="led-5" class="h-14 md:h-16 rounded-lg bg-red-950/40 border border-red-900/40 transition-all duration-75"></div>
+
+                <!-- Center White/Amber Strobes (2 Units) -->
+                <div id="led-center-1" class="h-14 md:h-16 rounded-lg bg-slate-900 border border-slate-800 transition-all duration-75"></div>
+                <div id="led-center-2" class="h-14 md:h-16 rounded-lg bg-slate-900 border border-slate-800 transition-all duration-75"></div>
+
+                <!-- Blue Side (Right 5 Units) -->
+                <div id="led-6" class="h-14 md:h-16 rounded-lg bg-blue-950/40 border border-blue-900/40 transition-all duration-75"></div>
+                <div id="led-7" class="h-14 md:h-16 rounded-lg bg-blue-950/40 border border-blue-900/40 transition-all duration-75"></div>
+                <div id="led-8" class="h-14 md:h-16 rounded-lg bg-blue-950/40 border border-blue-900/40 transition-all duration-75"></div>
+                <div id="led-9" class="h-14 md:h-16 rounded-lg bg-blue-950/40 border border-blue-900/40 transition-all duration-75"></div>
+                <div id="led-10" class="h-14 md:h-16 rounded-lg bg-blue-950/40 border border-blue-900/40 transition-all duration-75"></div>
+            </div>
+
+            <!-- Lightbar Selector Switchers -->
+            <div class="mt-4 flex flex-wrap gap-2 justify-center">
+                <button data-light-pattern="police" class="light-pattern-btn bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium transition active text-blue-400">
+                    <i class="fa-solid fa-car-on"></i> 警车红蓝爆闪
+                </button>
+                <button data-light-pattern="ambulance" class="light-pattern-btn bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium transition">
+                    <i class="fa-solid fa-truck-medical"></i> 救护车急救闪烁
+                </button>
+                <button data-light-pattern="fire" class="light-pattern-btn bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium transition">
+                    <i class="fa-solid fa-fire-extinguisher text-red-400"></i> 消防全红猛闪
+                </button>
+                <button data-light-pattern="traffic" class="light-pattern-btn bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium transition">
+                    <i class="fa-solid fa-arrows-left-right text-amber-400"></i> 交通引导黄灯
+                </button>
+                <button data-light-pattern="strobe" class="light-pattern-btn bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium transition">
+                    <i class="fa-solid fa-bolt text-yellow-300"></i> 全白高频频闪
+                </button>
+                <button id="lightPowerBtn" class="bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-700 px-3 py-1.5 rounded-lg text-xs font-bold transition ml-auto">
+                    <i class="fa-solid fa-power-off"></i> 灯光开关
+                </button>
+            </div>
+        </section>
+
+        <!-- Siren Sound Control Box & Visualizer -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- Left 2 Columns: Main Siren Buttons Console -->
+            <section class="lg:col-span-2 console-panel rounded-2xl p-5 border border-slate-800 flex flex-col justify-between">
+                <div>
+                    <!-- Section Title & Audio Visualizer Header -->
+                    <div class="flex justify-between items-center mb-4">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-sliders text-blue-400"></i>
+                            <h2 class="text-sm font-bold tracking-wider text-slate-200 uppercase">警笛音调选择面板 (SIREN SELECTOR)</h2>
+                        </div>
+                        <span id="activeSirenBadge" class="bg-slate-800 text-slate-400 text-xs font-mono px-3 py-1 rounded-full border border-slate-700">
+                            待机 (STANDBY)
+                        </span>
+                    </div>
+
+                    <!-- Audio Oscilloscope Visualizer Canvas -->
+                    <div class="mb-5 bg-slate-950 p-2 rounded-xl border border-slate-800 relative">
+                        <canvas id="audioVisualizer" class="w-full h-16 rounded-lg bg-black/60"></canvas>
+                        <div class="absolute bottom-3 right-4 font-digits text-[10px] text-blue-400/80 tracking-widest pointer-events-none">
+                            FREQ: <span id="freqReadout" class="text-blue-300">0</span> Hz
+                        </div>
+                    </div>
+
+                    <!-- Siren Sound Buttons Matrix -->
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+
+                        <!-- Wail Siren Button -->
+                        <button id="sirenWailBtn" class="siren-mode-btn bg-slate-900/90 hover:bg-slate-800 text-slate-300 p-4 rounded-xl border border-slate-700 flex flex-col items-center justify-center gap-2 transition group relative overflow-hidden">
+                            <div class="w-10 h-10 rounded-full bg-blue-950/60 border border-blue-800/60 flex items-center justify-center group-hover:scale-110 transition">
+                                <i class="fa-solid fa-[#10b981] fa-wave-square text-blue-400 text-lg"></i>
+                            </div>
+                            <div class="text-center">
+                                <div class="font-bold text-sm text-slate-100">巡逻长鸣</div>
+                                <div class="text-[11px] text-slate-400 font-mono">WAIL SIREN</div>
+                            </div>
+                        </button>
+
+                        <!-- Yelp Siren Button -->
+                        <button id="sirenYelpBtn" class="siren-mode-btn bg-slate-900/90 hover:bg-slate-800 text-slate-300 p-4 rounded-xl border border-slate-700 flex flex-col items-center justify-center gap-2 transition group relative overflow-hidden">
+                            <div class="w-10 h-10 rounded-full bg-red-950/60 border border-red-800/60 flex items-center justify-center group-hover:scale-110 transition">
+                                <i class="fa-solid fa-bolt text-red-400 text-lg"></i>
+                            </div>
+                            <div class="text-center">
+                                <div class="font-bold text-sm text-slate-100">急促警报</div>
+                                <div class="text-[11px] text-slate-400 font-mono">YELP SIREN</div>
+                            </div>
+                        </button>
+
+                        <!-- Phaser / Piercer Siren Button -->
+                        <button id="sirenPhaserBtn" class="siren-mode-btn bg-slate-900/90 hover:bg-slate-800 text-slate-300 p-4 rounded-xl border border-slate-700 flex flex-col items-center justify-center gap-2 transition group relative overflow-hidden">
+                            <div class="w-10 h-10 rounded-full bg-amber-950/60 border border-amber-800/60 flex items-center justify-center group-hover:scale-110 transition">
+                                <i class="fa-solid fa-burst text-amber-400 text-lg"></i>
+                            </div>
+                            <div class="text-center">
+                                <div class="font-bold text-sm text-slate-100">穿透高频</div>
+                                <div class="text-[11px] text-slate-400 font-mono">PHASER / PIERCER</div>
+                            </div>
+                        </button>
+
+                        <!-- Hi-Lo Siren Button -->
+                        <button id="sirenHiLoBtn" class="siren-mode-btn bg-slate-900/90 hover:bg-slate-800 text-slate-300 p-4 rounded-xl border border-slate-700 flex flex-col items-center justify-center gap-2 transition group relative overflow-hidden">
+                            <div class="w-10 h-10 rounded-full bg-emerald-950/60 border border-emerald-800/60 flex items-center justify-center group-hover:scale-110 transition">
+                                <i class="fa-solid fa-drum-steelpan text-emerald-400 text-lg"></i>
+                            </div>
+                            <div class="text-center">
+                                <div class="font-bold text-sm text-slate-100">双音交替</div>
+                                <div class="text-[11px] text-slate-400 font-mono">HI-LO (EUROPE)</div>
+                            </div>
+                        </button>
+
+                        <!-- Air Horn Momentary Button -->
+                        <button id="airHornBtn" class="bg-slate-900/90 hover:bg-slate-800 text-slate-300 p-4 rounded-xl border border-slate-700 flex flex-col items-center justify-center gap-2 transition group active:bg-amber-600 active:text-white select-none">
+                            <div class="w-10 h-10 rounded-full bg-yellow-950/60 border border-yellow-800/60 flex items-center justify-center group-hover:scale-110 transition">
+                                <i class="fa-solid fa-bullhorn text-yellow-400 text-lg"></i>
+                            </div>
+                            <div class="text-center">
+                                <div class="font-bold text-sm text-slate-100">气喇叭 (长按)</div>
+                                <div class="text-[11px] text-slate-400 font-mono">AIR HORN</div>
+                            </div>
+                        </button>
+
+                        <!-- Manual Pitch Sweep Button -->
+                        <button id="sirenManualBtn" class="siren-mode-btn bg-slate-900/90 hover:bg-slate-800 text-slate-300 p-4 rounded-xl border border-slate-700 flex flex-col items-center justify-center gap-2 transition group relative overflow-hidden">
+                            <div class="w-10 h-10 rounded-full bg-purple-950/60 border border-purple-800/60 flex items-center justify-center group-hover:scale-110 transition">
+                                <i class="fa-solid fa-hand-pointer text-purple-400 text-lg"></i>
+                            </div>
+                            <div class="text-center">
+                                <div class="font-bold text-sm text-slate-100">手动变调</div>
+                                <div class="text-[11px] text-slate-400 font-mono">MANUAL SWEEP</div>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Manual Pitch Touch / Mouse Control Pad -->
+                <div id="manualPitchContainer" class="mt-4 p-3 bg-slate-950 rounded-xl border border-slate-800 flex flex-col gap-2">
+                    <div class="flex justify-between items-center text-xs text-slate-400 font-semibold">
+                        <span><i class="fa-solid fa-sliders text-purple-400 mr-1"></i> 手动基频控制触控板</span>
+                        <span id="manualPitchVal" class="font-mono text-purple-300">800 Hz</span>
+                    </div>
+                    <input type="range" id="manualPitchSlider" min="300" max="1800" value="800" class="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer">
+                </div>
+
+                <!-- Emergency Kill Switch Bar -->
+                <div class="mt-5 pt-4 border-t border-slate-800 flex flex-wrap gap-3 items-center justify-between">
+                    <button id="masterStopBtn" class="bg-red-600/90 hover:bg-red-600 active:bg-red-700 text-white font-black py-3 px-8 rounded-xl shadow-lg shadow-red-900/40 border border-red-400/40 transition flex items-center gap-2 text-sm uppercase tracking-wider">
+                        <i class="fa-solid fa-circle-stop text-lg"></i> 一键静音 / 停警 (KILL ALL)
+                    </button>
+
+                    <div class="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800">
+                        <input type="checkbox" id="rumblerToggle" class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 bg-slate-900 border-slate-700 cursor-pointer">
+                        <label for="rumblerToggle" class="text-xs font-bold text-slate-300 cursor-pointer flex items-center gap-1">
+                            <i class="fa-solid fa-compact-disc text-blue-400"></i> 低音震荡炮 (Rumbler Sub-Bass)
+                        </label>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right Column: Micro-Soundboard & Audio Modifiers -->
+            <section class="console-panel rounded-2xl p-5 border border-slate-800 flex flex-col justify-between gap-4">
+                <div>
+                    <div class="flex items-center gap-2 mb-4">
+                        <i class="fa-solid fa-walkie-talkie text-emerald-400"></i>
+                        <h2 class="text-sm font-bold tracking-wider text-slate-200 uppercase">声效与手持喊话器 (AUDIO FX)</h2>
+                    </div>
+
+                    <!-- Micro Soundboard SFX Buttons -->
+                    <div class="grid grid-cols-2 gap-2.5 mb-5">
+                        <button id="sfxRadioBeepBtn" class="bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 p-3 rounded-xl text-xs font-semibold flex items-center gap-2 transition active:scale-95">
+                            <i class="fa-solid fa-radio text-emerald-400"></i> 对讲机提示音
+                        </button>
+                        <button id="sirenChirpBtn" class="bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 p-3 rounded-xl text-xs font-semibold flex items-center gap-2 transition active:scale-95">
+                            <i class="fa-solid fa-bell text-blue-400"></i> 警示短鸣 (Chirp)
+                        </button>
+                        <button id="sfxEngineRevBtn" class="bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 p-3 rounded-xl text-xs font-semibold flex items-center gap-2 transition active:scale-95">
+                            <i class="fa-solid fa-gauge-high text-amber-400"></i> 警车引擎轰鸣
+                        </button>
+                        <button id="sfxDispersalBtn" class="bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 p-3 rounded-xl text-xs font-semibold flex items-center gap-2 transition active:scale-95">
+                            <i class="fa-solid fa-circle-exclamation text-red-400"></i> 强力驱散声束
+                        </button>
+                    </div>
+
+                    <!-- PA / Microphone Simulation Section -->
+            // Sound Pitch & Master Speed Tuning Sliders
+            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col gap-3">
+                        <div class="flex justify-between items-center">
+                            <div class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                                <i class="fa-solid fa-microphone text-red-400"></i>
+                                车载手持喊话器 (PA MIC)
+                            </div>
+                            <span id="micStatusTag" class="text-[10px] font-mono text-slate-500 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                                未连接
+                            </span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">
+                            按下下方按钮授权麦克风，开启带对讲滤波模拟的实时喊话功能。
+                        </p>
+                        <button id="toggleMicBtn" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-2.5 px-4 rounded-lg text-xs transition border border-slate-600 flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-microphone-lines"></i> 按下开启/关闭麦克风喊话
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Sound Pitch & Master Speed Tuning Sliders -->
+                <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col gap-3">
+                    <div class="text-xs font-bold text-slate-300 flex items-center gap-2">
+                        <i class="fa-solid fa-sliders text-amber-400"></i> 声音与频率参数调节
+                    </div>
+
+                    <!-- Volume Control -->
+                    <div class="flex flex-col gap-1">
+                        <div class="flex justify-between text-[11px] text-slate-400 font-mono">
+                            <span>主输出音量 (MASTER VOLUME)</span>
+                            <span id="volVal">80%</span>
+                        </div>
+                        <input type="range" id="masterVolumeSlider" min="0" max="100" value="80" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer">
+                    </div>
+
+                    <!-- Speed Cycle Adjustment -->
+                    <div class="flex flex-col gap-1">
+                        <div class="flex justify-between text-[11px] text-slate-400 font-mono">
+                            <span>警报周期速率 (SIREN SPEED)</span>
+                            <span id="speedVal">1.0x</span>
+                        </div>
+                        <input type="range" id="sirenSpeedSlider" min="5" max="25" value="10" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer">
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Bottom Footer Info Bar -->
+    <footer class="bg-slate-900/80 border-t border-slate-800 p-4 text-center text-xs text-slate-400 backdrop-blur-md">
+        <div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-2">
+            <div>
+                <i class="fa-solid fa-shield-cat text-blue-400 mr-1"></i>
+                <span class="font-semibold text-slate-300">警笛声光模拟控制终端</span> &bull; 纯Web Audio API高保真警报合成器
+            </div>
+            <div class="text-slate-400 text-[11px]">
+                提示：某些移动设备需先点击页面任意处以允许音频播放
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Sound & Siren Engine Core
+        class SirenAudioEngine {
+            constructor() {
+                this.audioCtx = null;
+                this.masterGain = null;
+                this.analyser = null;
+                
+                // Active Generators
+                this.activeOsc = null;
+                this.lfoOsc = null;
+                this.lfoGain = null;
+                this.rumblerOsc = null;
+                this.rumblerGain = null;
+
+                // Air horn specific
+                this.hornOscs = [];
+                this.hornGain = null;
+
+                // State
+                this.currentMode = null; // 'wail', 'yelp', 'phaser', 'hilo', 'manual', 'horn'
+                this.volume = 0.8;
+                this.speedMultiplier = 1.0;
+                this.rumblerEnabled = false;
+
+                // Mic PA Stream
+                this.micStream = null;
+                this.micSource = null;
+                this.micGain = null;
+                this.micFilter = null;
+                this.isMicActive = false;
+            }
+
+            initContext() {
+                if (!this.audioCtx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    this.audioCtx = new AudioContext();
+
+                    // Master Volume Node
+                    this.masterGain = this.audioCtx.createGain();
+                    this.masterGain.gain.setValueAtTime(this.volume, this.audioCtx.currentTime);
+
+                    // Audio Analyser Node for Visualizer
+                    this.analyser = this.audioCtx.createAnalyser();
+                    this.analyser.fftSize = 256;
+
+                    // Connect master chain
+                    this.masterGain.connect(this.analyser);
+                    this.analyser.connect(this.audioCtx.destination);
+                }
+
+                if (this.audioCtx.state === 'suspended') {
+                    this.audioCtx.resume();
+                }
+            }
+
+            setVolume(val) {
+                this.volume = val;
+                if (this.masterGain && this.audioCtx) {
+                    this.masterGain.gain.setValueAtTime(val, this.audioCtx.currentTime);
+                }
+            }
+
+            setSpeed(val) {
+                this.speedMultiplier = val;
+                if (this.currentMode && this.currentMode !== 'manual') {
+                    // Re-trigger current mode with new speed
+                    const mode = this.currentMode;
+                    this.stopSiren();
+                    this.startSiren(mode);
+                }
+            }
+
+            stopSiren() {
+                if (!this.audioCtx) return;
+
+                const now = this.audioCtx.currentTime;
+
+                if (this.activeOsc) {
+                    try {
+                        this.activeOsc.stop(now + 0.05);
+                    } catch(e){}
+                    this.activeOsc = null;
+                }
+                if (this.lfoOsc) {
+                    try {
+                        this.lfoOsc.stop(now + 0.05);
+                    } catch(e){}
+                    this.lfoOsc = null;
+                }
+                if (this.rumblerOsc) {
+                    try {
+                        this.rumblerOsc.stop(now + 0.05);
+                    } catch(e){}
+                    this.rumblerOsc = null;
+                }
+
+                this.stopAirHorn();
+                this.currentMode = null;
+            }
+
+            startSiren(mode) {
+                this.initContext();
+                if (this.currentMode === mode && mode !== 'manual') return;
+
+                this.stopSiren();
+                this.currentMode = mode;
+
+                const now = this.audioCtx.currentTime;
+
+                // Primary Siren Oscillator
+                this.activeOsc = this.audioCtx.createOscillator();
+                const sirenGain = this.audioCtx.createGain();
+                sirenGain.gain.setValueAtTime(0.35, now);
+
+                // Low Pass Filter for realistic speaker enclosure damping
+                const filter = this.audioCtx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(2500, now);
+
+                this.activeOsc.connect(sirenGain);
+                sirenGain.connect(filter);
+                filter.connect(this.masterGain);
+
+                if (mode === 'wail') {
+                    // Slow sweep: 550Hz -> 1150Hz
+                    this.activeOsc.type = 'sawtooth';
+                    this.activeOsc.frequency.setValueAtTime(550, now);
+
+                    this.lfoOsc = this.audioCtx.createOscillator();
+                    this.lfoGain = this.audioCtx.createGain();
+
+                    this.lfoOsc.type = 'triangle';
+                    this.lfoOsc.frequency.setValueAtTime(0.22 * this.speedMultiplier, now); // ~4.5s cycle
+                    this.lfoGain.gain.setValueAtTime(300, now); // Pitch variation +/- 300Hz
+
+                    this.lfoOsc.connect(this.lfoGain);
+                    this.lfoGain.connect(this.activeOsc.frequency);
+
+                    this.activeOsc.start(now);
+                    this.lfoOsc.start(now);
+                } 
+                else if (mode === 'yelp') {
+                    // Fast sweep: 650Hz -> 1250Hz
+                    this.activeOsc.type = 'sawtooth';
+                    this.activeOsc.frequency.setValueAtTime(900, now);
+
+                    this.lfoOsc = this.audioCtx.createOscillator();
+                    this.lfoGain = this.audioCtx.createGain();
+
+                    this.lfoOsc.type = 'sawtooth';
+                    this.lfoOsc.frequency.setValueAtTime(3.8 * this.speedMultiplier, now); // Rapid yelp cycle
+                    this.lfoGain.gain.setValueAtTime(350, now);
+
+                    this.lfoOsc.connect(this.lfoGain);
+                    this.lfoGain.connect(this.activeOsc.frequency);
+
+                    this.activeOsc.start(now);
+                    this.lfoOsc.start(now);
+                } 
+                else if (mode === 'phaser') {
+                    // Ultra-fast piercer sweep: 700Hz -> 1500Hz
+                    this.activeOsc.type = 'square';
+                    this.activeOsc.frequency.setValueAtTime(1100, now);
+
+                    this.lfoOsc = this.audioCtx.createOscillator();
+                    this.lfoGain = this.audioCtx.createGain();
+
+                    this.lfoOsc.type = 'sawtooth';
+                    this.lfoOsc.frequency.setValueAtTime(12.0 * this.speedMultiplier, now); // Extremely fast
+                    this.lfoGain.gain.setValueAtTime(450, now);
+
+                    this.lfoOsc.connect(this.lfoGain);
+                    this.lfoGain.connect(this.activeOsc.frequency);
+
+                    this.activeOsc.start(now);
+                    this.lfoOsc.start(now);
+                } 
+                else if (mode === 'hilo') {
+                    // Alternating Two-tone Hi-Lo (European)
+                    this.activeOsc.type = 'triangle';
+                    this.activeOsc.frequency.setValueAtTime(700, now);
+
+                    this.lfoOsc = this.audioCtx.createOscillator();
+                    this.lfoGain = this.audioCtx.createGain();
+
+                    this.lfoOsc.type = 'square';
+                    this.lfoOsc.frequency.setValueAtTime(1.5 * this.speedMultiplier, now);
+                    this.lfoGain.gain.setValueAtTime(180, now); // Switch between 700 & 1060 Hz
+
+                    this.lfoOsc.connect(this.lfoGain);
+                    this.lfoGain.connect(this.activeOsc.frequency);
+
+                    this.activeOsc.start(now);
+                    this.lfoOsc.start(now);
+                } 
+                else if (mode === 'manual') {
+                    // Manual Pitch Control
+                    this.activeOsc.type = 'sawtooth';
+                    const initFreq = parseFloat(document.getElementById('manualPitchSlider').value);
+                    this.activeOsc.frequency.setValueAtTime(initFreq, now);
+                    this.activeOsc.start(now);
+                }
+
+                // Attach Sub-Bass Rumbler if toggled
+                if (this.rumblerEnabled) {
+                    this.startRumbler();
+                }
+            }
+
+            setManualPitch(freq) {
+                if (this.currentMode === 'manual' && this.activeOsc && this.audioCtx) {
+                    this.activeOsc.frequency.setValueAtTime(freq, this.audioCtx.currentTime);
+                }
+            }
+
+            startRumbler() {
+                if (!this.audioCtx || this.rumblerOsc) return;
+                const now = this.audioCtx.currentTime;
+
+                this.rumblerOsc = this.audioCtx.createOscillator();
+                this.rumblerGain = this.audioCtx.createGain();
+
+                this.rumblerOsc.type = 'square';
+                this.rumblerOsc.frequency.setValueAtTime(65, now); // Deep 65Hz sub octave
+
+                // Pulsing gain for low rumble
+                const rumblerLfo = this.audioCtx.createOscillator();
+                const rumblerLfoGain = this.audioCtx.createGain();
+                rumblerLfo.frequency.setValueAtTime(8, now);
+                rumblerLfoGain.gain.setValueAtTime(0.15, now);
+
+                this.rumblerGain.gain.setValueAtTime(0.25, now);
+
+                this.rumblerOsc.connect(this.rumblerGain);
+                this.rumblerGain.connect(this.masterGain);
+
+                this.rumblerOsc.start(now);
+            }
+
+            triggerAirHorn(start) {
+                this.initContext();
+                const now = this.audioCtx.currentTime;
+
+                if (start) {
+                    if (this.hornOscs.length > 0) return; // already sounding
+
+                    this.hornGain = this.audioCtx.createGain();
+                    this.hornGain.gain.setValueAtTime(0, now);
+                    this.hornGain.gain.linearRampToValueAtTime(0.5, now + 0.04);
+
+                    // Multi-chord frequencies for authentic heavy vehicle air horn
+                    const freqs = [115, 148, 220, 310]; 
+                    freqs.forEach(f => {
+                        const osc = this.audioCtx.createOscillator();
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(f, now);
+                        osc.connect(this.hornGain);
+                        osc.start(now);
+                        this.hornOscs.push(osc);
+                    });
+
+                    this.hornGain.connect(this.masterGain);
+                } else {
+                    this.stopAirHorn();
+                }
+            }
+
+            stopAirHorn() {
+                if (this.hornGain && this.audioCtx) {
+                    const now = this.audioCtx.currentTime;
+                    this.hornGain.gain.linearRampToValueAtTime(0, now + 0.08);
+                    setTimeout(() => {
+                        this.hornOscs.forEach(o => {
+                            try { o.stop(); } catch(e){}
+                        });
+                        this.hornOscs = [];
+                        this.hornGain = null;
+                    }, 100);
+                }
+            }
+
+            playChirp() {
+                this.initContext();
+                const now = this.audioCtx.currentTime;
+                const osc = this.audioCtx.createOscillator();
+                const gain = this.audioCtx.createGain();
+
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(600, now);
+                osc.frequency.exponentialRampToValueAtTime(1400, now + 0.08);
+
+                gain.gain.setValueAtTime(0.4, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.09);
+
+                osc.connect(gain);
+                gain.connect(this.masterGain);
+
+                osc.start(now);
+                osc.stop(now + 0.1);
+            }
+
+            playRadioBeep() {
+                this.initContext();
+                const now = this.audioCtx.currentTime;
+                const osc = this.audioCtx.createOscillator();
+                const gain = this.audioCtx.createGain();
+
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(1240, now);
+
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.12);
+
+                osc.connect(gain);
+                gain.connect(this.masterGain);
+
+                osc.start(now);
+                osc.stop(now + 0.13);
+            }
+
+            playEngineRev() {
+                this.initContext();
+                const now = this.audioCtx.currentTime;
+                const osc = this.audioCtx.createOscillator();
+                const gain = this.audioCtx.createGain();
+
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(80, now);
+                osc.frequency.exponentialRampToValueAtTime(260, now + 0.5);
+                osc.frequency.exponentialRampToValueAtTime(100, now + 1.2);
+
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.linearRampToValueAtTime(0, now + 1.2);
+
+                osc.connect(gain);
+                gain.connect(this.masterGain);
+
+                osc.start(now);
+                osc.stop(now + 1.25);
+            }
+
+            playDispersalBeam() {
+                this.initContext();
+                const now = this.audioCtx.currentTime;
+                const osc = this.audioCtx.createOscillator();
+                const gain = this.audioCtx.createGain();
+
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(2200, now);
+                osc.frequency.linearRampToValueAtTime(1800, now + 0.3);
+
+                gain.gain.setValueAtTime(0.4, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.35);
+
+                osc.connect(gain);
+                gain.connect(this.masterGain);
+
+                osc.start(now);
+                osc.stop(now + 0.36);
+            }
+
+            async toggleMicrophone() {
+                this.initContext();
+                if (this.isMicActive) {
+                    // Turn off mic
+                    if (this.micStream) {
+                        this.micStream.getTracks().forEach(track => track.stop());
+                    }
+                    this.isMicActive = false;
+                    return false;
+                } else {
+                    try {
+                        this.micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                        this.micSource = this.audioCtx.createMediaStreamSource(this.micStream);
+                        
+                        // Megaphone Filter Bandpass
+                        this.micFilter = this.audioCtx.createBiquadFilter();
+                        this.micFilter.type = 'bandpass';
+                        this.micFilter.frequency.setValueAtTime(1200, this.audioCtx.currentTime);
+                        this.micFilter.Q.setValueAtTime(2.5, this.audioCtx.currentTime);
+
+                        this.micGain = this.audioCtx.createGain();
+                        this.micGain.gain.setValueAtTime(1.5, this.audioCtx.currentTime);
+
+                        this.micSource.connect(this.micFilter);
+                        this.micFilter.connect(this.micGain);
+                        this.micGain.connect(this.masterGain);
+
+                        this.isMicActive = true;
+                        return true;
+                    } catch (err) {
+                        console.error('Microphone access error:', err);
+                        return false;
+                    }
+                }
+            }
+        }
+
+        class LightbarController {
+            constructor() {
+                this.pattern = 'police'; // 'police', 'ambulance', 'fire', 'traffic', 'strobe'
+                this.isOn = true;
+                this.timer = null;
+                this.step = 0;
+
+                // LED Nodes
+                this.leftLeds = [
+                    document.getElementById('led-1'),
+                    document.getElementById('led-2'),
+                    document.getElementById('led-3'),
+                    document.getElementById('led-4'),
+                    document.getElementById('led-5')
+                ];
+                this.centerLeds = [
+                    document.getElementById('led-center-1'),
+                    document.getElementById('led-center-2')
+                ];
+                this.rightLeds = [
+                    document.getElementById('led-6'),
+                    document.getElementById('led-7'),
+                    document.getElementById('led-8'),
+                    document.getElementById('led-9'),
+                    document.getElementById('led-10')
+                ];
+
+                this.strobeOverlayDisplay = document.getElementById('strobeDisplayArea');
+                this.start();
+            }
+
+            setPattern(p) {
+                this.pattern = p;
+                this.step = 0;
+            }
+
+            togglePower() {
+                this.isOn = !this.isOn;
+                if (!this.isOn) {
+                    this.clearAll();
+                }
+                return this.isOn;
+            }
+
+            clearAll() {
+                [...this.leftLeds, ...this.centerLeds, ...this.rightLeds].forEach(el => {
+                    if (el) el.className = 'h-14 md:h-16 rounded-lg bg-slate-900 border border-slate-800 transition-all duration-75';
+                });
+                if (this.strobeOverlayDisplay) {
+                    this.strobeOverlayDisplay.style.backgroundColor = '#000000';
+                }
+            }
+
+            start() {
+                if (this.timer) clearInterval(this.timer);
+
+                this.timer = setInterval(() => {
+                    if (!this.isOn) return;
+
+                    this.step = (this.step + 1) % 12;
+                    let leftColor = '';
+                    let rightColor = '';
+                    let centerColor = '';
+                    let fullScreenBg = '#000000';
+
+                    if (this.pattern === 'police') {
+                        // Standard Red (Left) & Blue (Right) Alternating Quad Flash
+                        if (this.step < 3) {
+                            if (this.step % 2 === 0) {
+                                leftColor = 'glow-red bg-red-600 border-red-300';
+                                fullScreenBg = 'rgba(220, 38, 38, 0.85)';
+                            }
+                        } else if (this.step >= 6 && this.step < 9) {
+                            if (this.step % 2 === 0) {
+                                rightColor = 'glow-blue bg-blue-600 border-blue-300';
+                                fullScreenBg = 'rgba(37, 99, 235, 0.85)';
+                            }
+                        }
+                    } 
+                    else if (this.pattern === 'ambulance') {
+                        // Red & White Strobe
+                        if (this.step % 2 === 0) {
+                            if (this.step < 6) {
+                                leftColor = 'glow-red bg-red-600 border-red-300';
+                                centerColor = 'glow-white bg-white border-slate-100';
+                                fullScreenBg = 'rgba(239, 68, 68, 0.85)';
+                            } else {
+                                rightColor = 'glow-red bg-red-600 border-red-300';
+                                centerColor = 'glow-white bg-white border-slate-100';
+                                fullScreenBg = 'rgba(255, 255, 255, 0.85)';
+                            }
+                        }
+                    } 
+                    else if (this.pattern === 'fire') {
+                        // Rapid Triple All-Red Strobe
+                        if (this.step % 2 === 0) {
+                            leftColor = 'glow-red bg-red-600 border-red-300';
+                            rightColor = 'glow-red bg-red-600 border-red-300';
+                            centerColor = 'glow-red bg-red-600 border-red-300';
+                            fullScreenBg = 'rgba(220, 38, 38, 0.9)';
+                        }
+                    } 
+                    else if (this.pattern === 'traffic') {
+                        // Amber Traffic Directional Sweep
+                        const pos = this.step % 5;
+                        this.leftLeds.forEach((el, idx) => {
+                            if (idx === pos) el.className = 'h-14 md:h-16 rounded-lg glow-amber bg-amber-500 border-amber-200 transition-all duration-75';
+                            else el.className = 'h-14 md:h-16 rounded-lg bg-amber-950/20 border border-amber-900/30';
+                        });
+                        this.rightLeds.forEach((el, idx) => {
+                            if (idx === pos) el.className = 'h-14 md:h-16 rounded-lg glow-amber bg-amber-500 border-amber-200 transition-all duration-75';
+                            else el.className = 'h-14 md:h-16 rounded-lg bg-amber-950/20 border border-amber-900/30';
+                        });
+                        if (pos === 2) fullScreenBg = 'rgba(245, 158, 11, 0.7)';
+                        return; // Custom handled
+                    } 
+                    else if (this.pattern === 'strobe') {
+                        // Hyper White Strobe
+                        if (this.step % 2 === 0) {
+                            leftColor = 'glow-white bg-white border-slate-100';
+                            rightColor = 'glow-white bg-white border-slate-100';
+                            centerColor = 'glow-white bg-white border-slate-100';
+                            fullScreenBg = 'rgba(255, 255, 255, 0.95)';
+                        }
+                    }
+
+                    // Render Standard Red/Blue/White elements
+                    this.leftLeds.forEach(el => {
+                        el.className = 'h-14 md:h-16 rounded-lg transition-all duration-75 ' + (leftColor || 'bg-red-950/30 border border-red-900/30');
+                    });
+                    this.rightLeds.forEach(el => {
+                        el.className = 'h-14 md:h-16 rounded-lg transition-all duration-75 ' + (rightColor || 'bg-blue-950/30 border border-blue-900/30');
+                    });
+                    this.centerLeds.forEach(el => {
+                        el.className = 'h-14 md:h-16 rounded-lg transition-all duration-75 ' + (centerColor || 'bg-slate-900 border border-slate-800');
+                    });
+
+                    if (this.strobeOverlayDisplay) {
+                        this.strobeOverlayDisplay.style.backgroundColor = fullScreenBg;
+                    }
+                }, 80);
+            }
+        }
+
+        function initVisualizer(sirenEngine) {
+            const canvas = document.getElementById('audioVisualizer');
+            const ctx = canvas.getContext('2d');
+            const freqReadout = document.getElementById('freqReadout');
+
+            function resizeCanvas() {
+                canvas.width = canvas.clientWidth;
+                canvas.height = canvas.clientHeight;
+            }
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+
+            function draw() {
+                requestAnimationFrame(draw);
+
+                if (!sirenEngine.analyser) {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.strokeStyle = '#1e293b';
+                    ctx.beginPath();
+                    ctx.moveTo(0, canvas.height / 2);
+                    ctx.lineTo(canvas.width, canvas.height / 2);
+                    ctx.stroke();
+                    return;
+                }
+
+                const bufferLength = sirenEngine.analyser.frequencyBinCount;
+                const dataArray = new Uint8Array(bufferLength);
+                sirenEngine.analyser.getByteTimeDomainData(dataArray);
+
+                ctx.fillStyle = 'rgba(11, 15, 25, 0.3)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#3b82f6';
+                ctx.beginPath();
+
+                const sliceWidth = canvas.width * 1.0 / bufferLength;
+                let x = 0;
+                let maxVal = 0;
+
+                for (let i = 0; i < bufferLength; i++) {
+                    const v = dataArray[i] / 128.0;
+                    const y = v * canvas.height / 2;
+
+                    if (Math.abs(dataArray[i] - 128) > maxVal) {
+                        maxVal = Math.abs(dataArray[i] - 128);
+                    }
+
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+
+                    x += sliceWidth;
+                }
+
+                ctx.lineTo(canvas.width, canvas.height / 2);
+                ctx.stroke();
+
+                // Estimate approximate pitch frequency readout
+                if (sirenEngine.currentMode) {
+                    const approxFreq = Math.round(500 + (maxVal * 12));
+                    freqReadout.textContent = approxFreq;
+                } else {
+                    freqReadout.textContent = '0';
+                }
+            }
+
+            draw();
+        }
+
+        window.onload = function() {
+            const sirenEngine = new SirenAudioEngine();
+            const lightController = new LightbarController();
+
+            initVisualizer(sirenEngine);
+
+            // UI Elements
+            const activeSirenBadge = document.getElementById('activeSirenBadge');
+            const sirenModeBtns = document.querySelectorAll('.siren-mode-btn');
+
+            function updateSirenUI(activeMode) {
+                sirenModeBtns.forEach(btn => {
+                    btn.classList.remove('btn-active-blue', 'btn-active-red', 'btn-active-amber');
+                });
+
+                if (!activeMode) {
+                    activeSirenBadge.textContent = '待机 (STANDBY)';
+                    activeSirenBadge.className = 'bg-slate-800 text-slate-400 text-xs font-mono px-3 py-1 rounded-full border border-slate-700';
+                    return;
+                }
+
+                activeSirenBadge.className = 'bg-red-600 text-white text-xs font-mono px-3 py-1 rounded-full border border-red-400 shadow-md animate-pulse';
+
+                if (activeMode === 'wail') {
+                    document.getElementById('sirenWailBtn').classList.add('btn-active-blue');
+                    activeSirenBadge.textContent = '运行中: 巡逻长鸣 (WAIL)';
+                } else if (activeMode === 'yelp') {
+                    document.getElementById('sirenYelpBtn').classList.add('btn-active-red');
+                    activeSirenBadge.textContent = '运行中: 急促警报 (YELP)';
+                } else if (activeMode === 'phaser') {
+                    document.getElementById('sirenPhaserBtn').classList.add('btn-active-amber');
+                    activeSirenBadge.textContent = '运行中: 穿透高频 (PHASER)';
+                } else if (activeMode === 'hilo') {
+                    document.getElementById('sirenHiLoBtn').classList.add('btn-active-blue');
+                    activeSirenBadge.textContent = '运行中: 双音交替 (HI-LO)';
+                } else if (activeMode === 'manual') {
+                    document.getElementById('sirenManualBtn').classList.add('btn-active-amber');
+                    activeSirenBadge.textContent = '运行中: 手动变调 (MANUAL)';
+                }
+            }
+
+            // Siren Mode Buttons Click
+            document.getElementById('sirenWailBtn').onclick = () => {
+                sirenEngine.startSiren('wail');
+                updateSirenUI('wail');
+            };
+            // Siren Mode Buttons Click (Fix: Toggle on second click)
+            function handleSirenToggle(mode) {
+                if (sirenEngine.currentMode === mode) {
+                    sirenEngine.stopSiren();
+                    updateSirenUI(null);
+                } else {
+                    sirenEngine.startSiren(mode);
+                    updateSirenUI(mode);
+                }
+            }
+
+            document.getElementById('sirenWailBtn').onclick = () => handleSirenToggle('wail');
+            document.getElementById('sirenYelpBtn').onclick = () => handleSirenToggle('yelp');
+            document.getElementById('sirenPhaserBtn').onclick = () => handleSirenToggle('phaser');
+            document.getElementById('sirenHiLoBtn').onclick = () => handleSirenToggle('hilo');
+            document.getElementById('sirenManualBtn').onclick = () => handleSirenToggle('manual');
+
+            // Air Horn (Momentary Press & Hold)
+            const airHornBtn = document.getElementById('airHornBtn');
+            const startHorn = (e) => {
+                e.preventDefault();
+                sirenEngine.triggerAirHorn(true);
+            };
+            const stopHorn = (e) => {
+                e.preventDefault();
+                sirenEngine.triggerAirHorn(false);
+            };
+
+            airHornBtn.addEventListener('mousedown', startHorn);
+            airHornBtn.addEventListener('mouseup', stopHorn);
+            airHornBtn.addEventListener('mouseleave', stopHorn);
+            airHornBtn.addEventListener('touchstart', startHorn);
+            airHornBtn.addEventListener('touchend', stopHorn);
+
+            // Manual Pitch Slider
+            const manualSlider = document.getElementById('manualPitchSlider');
+            const manualPitchVal = document.getElementById('manualPitchVal');
+            // Kill Switch (Fix: Force kill mic and all sounds)
+            document.getElementById('masterStopBtn').onclick = () => {
+                sirenEngine.stopSiren();
+                if (sirenEngine.isMicActive) {
+                    sirenEngine.toggleMicrophone();
+                    micStatusTag.textContent = '未连接';
+                    micStatusTag.className = 'text-[10px] font-mono text-slate-500 bg-slate-900 px-2 py-0.5 rounded border border-slate-800';
+                    toggleMicBtn.classList.remove('bg-red-700', 'text-white');
+                }
+                updateSirenUI(null);
+            };
+
+            // Rumbler Toggle
+            document.getElementById('rumblerToggle').onchange = function() {
+                sirenEngine.rumblerEnabled = this.checked;
+                if (sirenEngine.currentMode) {
+                    if (this.checked) sirenEngine.startRumbler();
+                    else if (sirenEngine.rumblerOsc) {
+                        try { sirenEngine.rumblerOsc.stop(); }catch(e){}
+                        sirenEngine.rumblerOsc = null;
+                    }
+                }
+            };
+
+            // Soundboard Buttons
+            document.getElementById('sfxRadioBeepBtn').onclick = () => sirenEngine.playRadioBeep();
+            document.getElementById('sirenChirpBtn').onclick = () => sirenEngine.playChirp();
+            document.getElementById('sfxEngineRevBtn').onclick = () => sirenEngine.playEngineRev();
+            document.getElementById('sfxDispersalBtn').onclick = () => sirenEngine.playDispersalBeam();
+
+            // Microphone PA
+            const toggleMicBtn = document.getElementById('toggleMicBtn');
+            const micStatusTag = document.getElementById('micStatusTag');
+            toggleMicBtn.onclick = async () => {
+                const active = await sirenEngine.toggleMicrophone();
+                if (active) {
+                    micStatusTag.textContent = '喊话中';
+                    micStatusTag.className = 'text-[10px] font-mono text-red-400 bg-red-950 px-2 py-0.5 rounded border border-red-800 animate-pulse';
+                    toggleMicBtn.classList.add('bg-red-700', 'text-white');
+                } else {
+                    micStatusTag.textContent = '未连接';
+                    micStatusTag.className = 'text-[10px] font-mono text-slate-500 bg-slate-900 px-2 py-0.5 rounded border border-slate-800';
+                    toggleMicBtn.classList.remove('bg-red-700', 'text-white');
+                }
+            };
+
+            // Sliders Tuning
+            const masterVolSlider = document.getElementById('masterVolumeSlider');
+            const volVal = document.getElementById('volVal');
+            masterVolSlider.oninput = function() {
+                const v = this.value;
+                volVal.textContent = v + '%';
+                sirenEngine.setVolume(v / 100);
+            };
+
+            const speedSlider = document.getElementById('sirenSpeedSlider');
+            const speedVal = document.getElementById('speedVal');
+            speedSlider.oninput = function() {
+                const mult = (this.value / 10).toFixed(1);
+                speedVal.textContent = mult + 'x';
+                sirenEngine.setSpeed(parseFloat(mult));
+            };
+
+            // Light pattern selectors
+            const patternBtns = document.querySelectorAll('.light-pattern-btn');
+            const lightModeLabel = document.getElementById('lightModeLabel');
+
+            patternBtns.forEach(btn => {
+                btn.onclick = () => {
+                    patternBtns.forEach(b => b.classList.remove('border-blue-500', 'text-blue-400', 'bg-slate-700'));
+                    btn.classList.add('border-blue-500', 'text-blue-400', 'bg-slate-700');
+
+                    const pat = btn.getAttribute('data-light-pattern');
+                    lightController.setPattern(pat);
+
+                    const names = {
+                        'police': '当前模式: 巡逻交替爆闪',
+                        'ambulance': '当前模式: 救护车急救爆闪',
+                        'fire': '当前模式: 消防全红猛闪',
+                        'traffic': '当前模式: 交通引导黄灯',
+                        'strobe': '当前模式: 高频全白爆闪'
+                    };
+                    lightModeLabel.textContent = names[pat] || '';
+                };
+            });
+
+            document.getElementById('lightPowerBtn').onclick = function() {
+                const on = lightController.togglePower();
+                if (!on) {
+                    this.classList.add('opacity-50');
+                    lightModeLabel.textContent = '当前模式: 警灯已关闭';
+                } else {
+                    this.classList.remove('opacity-50');
+                    lightModeLabel.textContent = '当前模式: 开启中';
+                }
+            };
+
+            const fullscreenStrobe = document.getElementById('fullscreenStrobe');
+            const fullscreenTriggerBtn = document.getElementById('fullscreenTriggerBtn');
+            const closeStrobeBtn = document.getElementById('closeStrobeBtn');
+            const strobeToggleSoundBtn = document.getElementById('strobeToggleSoundBtn');
+            const strobeSoundStatus = document.getElementById('strobeSoundStatus');
+            const strobeNextPatternBtn = document.getElementById('strobeNextPatternBtn');
+
+            function exitFullscreenMode() {
+                fullscreenStrobe.classList.add('hidden');
+                if (strobeSoundActive) {
+                    sirenEngine.stopSiren();
+                    updateSirenUI(null);
+                    strobeSoundActive = false;
+                    strobeSoundStatus.textContent = '已关闭';
+                    strobeToggleSoundBtn.classList.remove('border-red-500', 'text-red-400');
+                }
+                if (document.exitFullscreen && document.fullscreenElement) {
+                    document.exitFullscreen().catch(()=>{});
+                }
+            }
+
+            fullscreenTriggerBtn.onclick = () => {
+                fullscreenStrobe.classList.remove('hidden');
+                if (document.documentElement.requestFullscreen) {
+                    document.documentElement.requestFullscreen().catch(()=>{});
+                }
+            };
+
+            // Fix: Close button & backdrop click to exit
+            closeStrobeBtn.onclick = exitFullscreenMode;
+            fullscreenStrobe.onclick = (e) => {
+                if (e.target === fullscreenStrobe || e.target.id === 'strobeDisplayArea' || e.target.closest('#strobeDisplayArea')) {
+                    exitFullscreenMode();
+                }
+            };
+
+            // Fix: Keyboard Esc key sync exit
+            document.addEventListener('fullscreenchange', () => {
+                if (!document.fullscreenElement && !fullscreenStrobe.classList.contains('hidden')) {
+                    exitFullscreenMode();
+                }
+            });
+
+            let strobeSoundActive = false;
+            strobeToggleSoundBtn.onclick = () => {
+                strobeSoundActive = !strobeSoundActive;
+                if (strobeSoundActive) {
+                    sirenEngine.startSiren('yelp');
+                    updateSirenUI('yelp');
+                    strobeSoundStatus.textContent = '已开启 (急促警报)';
+                    strobeToggleSoundBtn.classList.add('border-red-500', 'text-red-400');
+                } else {
+                    sirenEngine.stopSiren();
+                    updateSirenUI(null);
+                    strobeSoundStatus.textContent = '已关闭';
+                    strobeToggleSoundBtn.classList.remove('border-red-500', 'text-red-400');
+                }
+            };
+
+            const patternsList = ['police', 'ambulance', 'fire', 'strobe', 'traffic'];
+            let currentPatIdx = 0;
+            strobeNextPatternBtn.onclick = () => {
+                currentPatIdx = (currentPatIdx + 1) % patternsList.length;
+                const nextPat = patternsList[currentPatIdx];
+                lightController.setPattern(nextPat);
+                document.getElementById('strobeModeTitle').textContent = '全屏爆闪 (' + nextPat.toUpperCase() + ')';
+            };
+        };
+    </script>
+</body>
+</html>
